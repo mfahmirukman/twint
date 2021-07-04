@@ -88,7 +88,20 @@ def createIndex(config, instance, **scope):
                         "geo_tweet": {"type": "geo_point"},
                         "photos": {"type": "text"},
                         "user_rt_id": {"type": "keyword"},
-                        "mentions": {"type": "keyword", "normalizer": "hashtag_normalizer"},
+                        "mentions": {
+                            "type": "nested",
+                            "properties": {
+                                "id": {
+                                    "type": "long"
+                                },
+                                "name": {
+                                    "type": "text"
+                                },
+                                "screen_name": {
+                                    "type": "text"
+                                }
+                            }
+                        },
                         "source": {"type": "keyword"},
                         "user_rt": {"type": "keyword"},
                         "retweet_id": {"type": "keyword"},
@@ -197,6 +210,7 @@ def Tweet(Tweet, config):
     global _index_tweet_status
     global _is_near_def
     date_obj = datetime.strptime(Tweet.datetime, "%Y-%m-%d %H:%M:%S %Z")
+    # Tweet.place = ''
 
     actions = []
 
@@ -275,8 +289,11 @@ def Tweet(Tweet, config):
             j_data["_source"].update({"geo_near": _near})
     if Tweet.place:
         _t_place = getLocation(Tweet.place)
+
         if _t_place:
             j_data["_source"].update({"geo_tweet": getLocation(Tweet.place)})
+
+        j_data["_source"].update({"place": str(Tweet.place)})
     if Tweet.source:
         j_data["_source"].update({"source": Tweet.Source})
     if config.Translate:
