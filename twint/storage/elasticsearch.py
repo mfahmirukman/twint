@@ -4,6 +4,9 @@ from geopy.geocoders import Nominatim
 from datetime import datetime
 import contextlib
 import sys
+import nltk
+
+nltk.download()
 
 _index_tweet_status = False
 _index_follow_status = False
@@ -18,6 +21,61 @@ geolocator = Nominatim(user_agent="twint-1.2")
 class RecycleObject(object):
     def write(self, junk): pass
     def flush(self): pass
+
+def cleanURL(text):
+  x = text.split(" ")
+  if len(x) == 1:
+    if "https" in x or "https" in x:
+      x = ""
+  else:
+    for s in range(0, len(x)):
+      if "https" in x[s] or "http" in x[s]:
+        x[s] = ""
+      if "&amp;" in x[s]:
+        x[s] = ""
+      if "" in x[s]:
+        x[s] = "'"
+  ret = " ".join(x)
+  return ret
+
+def PreProcessText(text):
+
+  text = cleanURL(text)
+
+  # Tokenize text
+  tokens = nltk.word_tokenize(text)
+  
+  # convert to lower case
+  tokens = [word.lower() for word in tokens]
+
+ 
+
+  # remove alphanumeric characters
+  words = [word for word in tokens if word.isalpha()]
+
+  # remove stopwords with English parameter
+  from nltk.corpus import stopwords
+  stop_words = set(stopwords.words('english'))
+  words = [w for w in words if not w in stop_words]
+
+  # lemmatize
+#   from nltk.stem import 	WordNetLemmatizer
+#   wordnet_lemmatizer = WordNetLemmatizer()
+#   lemmatized = [wordnet_lemmatizer.lemmatize(word) for word in words]
+  # print(lemmatized[:100])
+
+  # from nltk.stem.snowball import SnowballStemmer
+    
+  # #the stemmer requires a language parameter
+  # snow_stemmer = SnowballStemmer(language='english')
+  # stemmed = [snow_stemmer.stem(word) for word in lemmatized]
+  # print(stemmed[:100])
+
+  # lemmatized = [wordnet_lemmatizer.lemmatize(word) for word in stemmed]
+
+  #ret = " ".join(lemmatized)
+  return words
+
 
 def getLocation(place, **options):
     location = geolocator.geocode(place,timeout=1000)
@@ -64,6 +122,7 @@ def createIndex(config, instance, **scope):
                         "place": {"type": "keyword"},
                         "location": {"type": "keyword"},
                         "tweet": {"type": "text"},
+                        "processed_tweet": {"type": "keyword", "ignore_above": 1000},
                         "lang": {"type": "keyword"},
                         "hashtags": {"type": "keyword", "normalizer": "hashtag_normalizer"},
                         "cashtags": {"type": "keyword", "normalizer": "hashtag_normalizer"},
@@ -114,6 +173,36 @@ def createIndex(config, instance, **scope):
                                     "type": "custom",
                                     "char_filter": [],
                                     "filter": ["lowercase", "asciifolding"]
+                                }
+                            },
+                            "filter": {
+                                "english_stop": {
+                                "type":       "stop",
+                                "stopwords":  "_english_" 
+                                },
+                                "english_keywords": {
+                                "type":       "keyword_marker",
+                                "keywords":   ["example"] 
+                                },
+                                "english_stemmer": {
+                                "type":       "stemmer",
+                                "language":   "english"
+                                },
+                                "english_possessive_stemmer": {
+                                "type":       "stemmer",
+                                "language":   "possessive_english"
+                                }
+                            },
+                            "analyzer": {
+                                "rebuilt_english": {
+                                "tokenizer":  "standard",
+                                "filter": [
+                                    "english_possessive_stemmer",
+                                    "lowercase",
+                                    "english_stop",
+                                    "english_keywords",
+                                    "english_stemmer"
+                                ]
                                 }
                             }
                         }
@@ -219,6 +308,7 @@ def Tweet(Tweet, config):
                 "timezone": Tweet.timezone,
                 "place": Tweet.place,
                 "tweet": Tweet.tweet,
+                "processed_tweet": PreProcessText(Tweet.tweet),
                 "language": Tweet.lang,
                 "hashtags": Tweet.hashtags,
                 "cashtags": Tweet.cashtags,
